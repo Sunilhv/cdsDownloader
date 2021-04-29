@@ -1,0 +1,61 @@
+REPORT zdtp_massdownload1.
+
+TABLES: dd02l.
+SELECT-OPTIONS: cdslist FOR dd02l-tabname.
+DATA name TYPE string.
+DATA cdstext TYPE string.
+" Pick folder path to save
+DATA : f_path     TYPE string,
+       f_pathname TYPE string.
+DATA: output_itab TYPE STANDARD TABLE OF optional.
+TYPES: BEGIN OF itab_type,
+         word(2000),
+       END OF itab_type.
+
+DATA: itab TYPE STANDARD TABLE OF itab_type WITH
+NON-UNIQUE DEFAULT KEY INITIAL SIZE 5.
+
+CALL METHOD cl_gui_frontend_services=>directory_browse
+  CHANGING
+    selected_folder      = f_path
+  EXCEPTIONS
+    cntl_error           = 1
+    error_no_gui         = 2
+    not_supported_by_gui = 3
+    OTHERS               = 4.
+
+IF sy-subrc EQ 0.
+  f_pathname = f_path.
+ENDIF.
+
+LOOP AT cdslist.
+  name = cdslist-low.
+  TRY.
+      cl_dd_ddl_handler_factory=>create( )->read(
+       EXPORTING
+        name = CONV ddlname( to_upper( name ) )
+       IMPORTING
+        ddddlsrcv_wa = DATA(ddlsrcv_wa) ).
+    CATCH cx_dd_ddl_read INTO DATA(exc).
+      cl_demo_output=>display( exc->get_text( ) ).
+  ENDTRY.
+  IF ddlsrcv_wa-source IS NOT INITIAL.
+"    cl_demo_output=>display( replace( val = ddlsrcv_wa-source sub = |\n| with = '' occ = 0 ) ).
+
+    CONCATENATE f_pathname '\' name '.txt' INTO name.
+
+"    cl_demo_output=>display( name  ).
+    cdstext = ddlsrcv_wa-source.
+    SPLIT cdstext AT cl_abap_char_utilities=>cr_lf INTO TABLE itab.
+" save cds
+    CALL METHOD cl_gui_frontend_services=>gui_download
+      EXPORTING
+        filename              = name
+        filetype              = 'ASC'
+        append                = 'X'
+        write_field_separator = 'X'
+      CHANGING
+        data_tab              = itab.
+
+  ENDIF.
+ENDLOOP.
